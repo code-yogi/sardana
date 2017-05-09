@@ -63,6 +63,9 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         self._nxclass_map = {}
         self.entryname = 'entry'
 
+    def getFormat(self):
+        return 'HDF5::NXscan'
+
     def setFileName(self, filename):
         if self.fd is not None:
             self.fd.close()
