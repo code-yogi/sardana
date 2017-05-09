@@ -161,13 +161,11 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                    self.filename)
 
         # populate the entry with some data
-
-        # this is the Application Definition for NeXus Generic Scans
         nxentry.create_dataset('definition', data='NXscan')
         import sardana.release
         program_name = '%s (%s)' % (sardana.release.name,
                                     self.__class__.__name__)
-        _pname = nxentry.create_dataset('program_name', program_name)
+        _pname = nxentry.create_dataset('program_name', data=program_name)
         _pname.attrs['version'] = sardana.release.version
         nxentry.create_dataset('start_time', data=env['starttime'].isoformat())
         _epoch = (env['starttime'] - datetime(1970, 1, 1)).total_seconds()
@@ -175,7 +173,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         nxentry.create_dataset('title', data=env['title'])
         nxentry.create_dataset('entry_identifier', data=str(env['serialno']))
 
-        _usergrp = self.fd.create_group('user')
+        _usergrp = nxentry.create_group('user')
         _usergrp.attrs['NX_class'] = 'NXuser'
         _usergrp.create_dataset('name', data=env['user'])
 
@@ -188,7 +186,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                 _ds = _meas.create_dataset(dd.label, dtype=dd.dtype,
                                            shape=([0] + list(dd.shape)),
                                            maxshape=([None] + list(dd.shape)),
-                                           chunks=([1] + list(dd.shape))
+                                           chunks=(1,) + tuple(dd.shape)
                                            )
                 if hasattr(dd, 'data_units'):
                     _ds.attrs['units'] = dd.data_units
@@ -210,7 +208,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         _meas = self.fd[os.path.join(self.entryname, 'measurement')]
         self.preScanSnapShot = env.get('preScanSnapShot', [])
         _snap = _meas.create_group('pre_scan_snapshot')
-        _meas.attrs['NX_class'] = 'NXcollection'
+        _snap.attrs['NX_class'] = 'NXcollection'
 
         meas_keys = _meas.keys()
 
@@ -253,11 +251,11 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                     data = data.astype(dd.dtype)
 
                 # resize the dataset and add the latest chunk
-                if _ds.shape[0] < record.number:
-                    _ds.resize(record.number + 1, axis=0)
+                if _ds.shape[0] <= record.recordno:
+                    _ds.resize(record.recordno + 1, axis=0)
 
                 # write the slab of data
-                _ds[record.number, ...] = data
+                _ds[record.recordno, ...] = data
             else:
                 self.debug('missing data for label %r', dd.label)
         self.fd.flush()
@@ -286,8 +284,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         for dd in self.datadesc:
             shape = ([len(recordlist.records)] + list(dd.shape))
             _ds = _meas.create_dataset(dd.label, dtype=dd.dtype, shape=shape,
-                                       chunks=([1] + list(dd.shape))
-                                       )
+                                       chunks=(1,) + tuple(dd.shape))
             if hasattr(dd, 'data_units'):
                 _ds.attrs['units'] = dd.data_units
 
