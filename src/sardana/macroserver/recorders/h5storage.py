@@ -60,7 +60,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
             self.setFileName(filename)
 
         self.currentlist = None
-        self.instrDict = {}
+        self._nxclass_map = {}
         self.entryname = 'entry'
 
     def setFileName(self, filename):
@@ -150,10 +150,10 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                         
         # make a dictionary out of env['instrumentlist']
         # (use fullnames -paths- as keys)
-        self.instrDict = {}
+        self._nxclass_map = {}
         for inst in env.get('instrumentlist', []):
-            self.instrDict[inst.getFullName()] = inst
-        if self.instrDict is {}:
+            self._nxclass_map[nxentry.name + inst.getFullName()] = inst.klass
+        if self._nxclass_map is {}:
             self.warning('Missing information on NEXUS structure. ' +
                          'Nexus Tree will not be created')
         
@@ -297,8 +297,8 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         self._endRecordList(recordlist)
 
     def _populateInstrumentInfo(self):
-
-        _meas = self.fd[os.path.join(self.entryname, 'measurement')]
+        nxentry = self.fd[self.entryname]
+        _meas = nxentry['measurement']
         _snap = _meas['pre_scan_snapshot']
         # create a link for each
         for dd in self.datadesc:
@@ -306,7 +306,8 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
             if getattr(dd, 'instrument', None):
                 try:
                     _ds = _meas[dd.label]
-                    _instr = self._createNXpath(dd.instrument)
+                    _instr = self._createNXpath(dd.instrument,
+                                                prefix=nxentry.name)
                     _instr[os.path.basename(_ds.name)] = _ds
                 except Exception, e:
                     msg = 'Could not create link to %r in %r. Reason: %r'
@@ -317,7 +318,8 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                 label = self.sanitizeName(dd.label)
                 try:
                     _ds = _snap[label]
-                    _instr = self._createNXpath(dd.instrument)
+                    _instr = self._createNXpath(dd.instrument,
+                                                prefix=nxentry.name)
                     _instr[os.path.basename(_ds.name)] = _ds
                 except Exception, e:
                     msg = 'Could not create link to %r in %r. Reason: %r'
@@ -372,7 +374,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                 except:
                     self.warning('cannot create link for "%s". Skipping', axis)
 
-    def _createNXpath(self, path):
+    def _createNXpath(self, path, prefix=None):
         """
         Creates a path in the nexus file composed by nested data_groups
         with their corresponding NXclass attributes.
@@ -380,14 +382,19 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         This method creates the groups if they do not exist. If the
         path is given using `name:nxclass` notation, the given nxclass is 
         used.
-        Otherwise, the class name is obtained from self.instrDict values 
+        Otherwise, the class name is obtained from self._nxclass_map values 
         (and if not found, it defaults to NXcollection). 
 
         It returns the tip of the branch (the last group created)
         """
 
-        # use current entry name as prefix if a relative path is given
-        path = os.path.join("/%s:NXentry" % self.entryname, path)
+        if prefix is None:
+            # if prefix is None, use current entry if path is relative
+            path = os.path.join("/%s:NXentry" % self.entryname, path)
+        else:
+            # if prefix is given explicitly, assume that path is relative to it
+            # even if path is absolute
+            path = os.path.join(prefix, path.lstrip('/'))
 
         grp = self.fd['/']
         for name in path[1:].split('/'):
@@ -399,10 +406,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
             grp = grp.require_group(name)
             if 'NX_class' not in grp.attrs:
                 if nxclass is None:
-                    try:
-                        nxclass = self.instrDict[grp.name].klass
-                    except:
-                        nxclass = 'NXcollection'
+                    nxclass = self._nxclass_map.get(grp.name, 'NXcollection')
                 grp.attrs['NX_class'] = nxclass
         return grp
 
