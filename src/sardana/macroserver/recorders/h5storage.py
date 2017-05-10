@@ -44,7 +44,7 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
     Saves data to a nexus file that follows the NXscan application definition
     (This is a pure h5py implementation that does not depend on the nxs module)
     """
-    formats = {'hdf5': '.hdf5'}
+    formats = {'h5': '.h5'}
     supported_dtypes = ('float32', 'float64', 'int8',
                         'int16', 'int32', 'int64', 'uint8',
                         'uint16', 'uint32',
