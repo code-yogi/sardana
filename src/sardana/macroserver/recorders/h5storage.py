@@ -187,11 +187,15 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         if self.savemode == SaveModes.Record:
             # create extensible datasets
             for dd in self.datadesc:
-                _ds = _meas.create_dataset(dd.label, dtype=dd.dtype,
-                                           shape=([0] + list(dd.shape)),
-                                           maxshape=([None] + list(dd.shape)),
-                                           chunks=(1,) + tuple(dd.shape)
-                                           )
+                shape = ([0] + list(dd.shape))
+                _ds = _meas.create_dataset(
+                        dd.label,
+                        dtype=dd.dtype,
+                        shape=shape,
+                        maxshape=([None] + list(dd.shape)),
+                        chunks=(1,) + tuple(dd.shape),
+                        compression=self._compression(shape)
+                        )
                 if hasattr(dd, 'data_units'):
                     _ds.attrs['units'] = dd.data_units
                     
@@ -203,6 +207,19 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         self._createPreScanSnapshot(env)
             
         self.fd.flush()
+
+    def _compression(self, shape, compfilter='gzip'):
+        """
+        Returns `compfilter` (the name of the compression filter) to use
+        (or None if no compression is recommended), based on the given shape
+        and the self._dataCompressionRank thresshold.
+        By default, `compfilter` is set to `'gzip'`
+        """
+        min_rank = self._dataCompressionRank
+        if shape is None or min_rank < 0 or len(shape) < min_rank:
+            return None
+        else:
+            return compfilter
     
     def _createPreScanSnapshot(self, env):
         """ 
@@ -226,7 +243,11 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
                 self.debug('Pre-scan snapshot of %s will be stored as type %s',
                            dd.name, dtype)
             if dtype in self.supported_dtypes:
-                _ds = _snap.create_dataset(label, data=pre_scan_value)
+                _ds = _snap.create_dataset(
+                        label,
+                        data=pre_scan_value,
+                        compression=self._compression(dd.shape)
+                )
                 # link to this dataset also from the measurement group
                 if label not in meas_keys:
                     _meas[label] = _ds
@@ -287,8 +308,13 @@ class NXscanH5_FileRecorder(BaseFileRecorder):
         _meas = self.fd[os.path.join(self.entryname, 'measurement')]
         for dd in self.datadesc:
             shape = ([len(recordlist.records)] + list(dd.shape))
-            _ds = _meas.create_dataset(dd.label, dtype=dd.dtype, shape=shape,
-                                       chunks=(1,) + tuple(dd.shape))
+            _ds = _meas.create_dataset(
+                    dd.label,
+                    dtype=dd.dtype,
+                    shape=shape,
+                    chunks=(1,) + tuple(dd.shape),
+                    compression=self._compression(shape)
+            )
             if hasattr(dd, 'data_units'):
                 _ds.attrs['units'] = dd.data_units
 
